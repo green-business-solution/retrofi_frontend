@@ -11,6 +11,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     outputs:
+      has_deploy: ${{ steps.changes.outputs.has_deploy }}
+      targets: ${{ steps.changes.outputs.targets }}
       data: ${{ steps.revisions.outputs.data }}
       backend: ${{ steps.revisions.outputs.backend }}
       frontend: ${{ steps.revisions.outputs.frontend }}
@@ -27,6 +29,7 @@ jobs:
         with:
           repository: green-business-solution/retrofi_frontend
           path: retrofi_frontend
+          fetch-depth: 0
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v6
         with:
@@ -37,6 +40,13 @@ jobs:
           npm ci --prefix retrofi_backend
           npm run setup --prefix retrofi_frontend
           npm run setup --prefix retrofi_backend
+      - name: Select production changes
+        id: changes
+        working-directory: retrofi_backend
+        env:
+          SOURCE_REPOSITORY: retrofi_frontend
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/select-split-deploy-targets.mjs
       - name: Record tested revisions
         id: revisions
         run: |
@@ -48,9 +58,10 @@ jobs:
           npm run typecheck --prefix retrofi_frontend
           npm test --prefix retrofi_frontend
           npm run build --prefix retrofi_frontend
+          npm audit --prefix retrofi_frontend --omit=dev --audit-level=high
   deploy:
     needs: checks
-    if: vars.RETROFI_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: needs.checks.outputs.has_deploy == 'true' && vars.RETROFI_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     concurrency:
       group: retrofi-production
@@ -90,10 +101,11 @@ jobs:
       - name: Deploy frontend
         working-directory: retrofi_backend
         env:
+          DEPLOY_TARGETS: ${{ needs.checks.outputs.targets }}
           AWS_PROFILE: ''
           AWS_DEPLOY_REGION: us-east-1
           GBS_AWS_REGION: us-east-2
-        run: npm run deploy:production -- frontend
+        run: npm run deploy:production -- $DEPLOY_TARGETS
       - name: Smoke check
         run: |
           curl --fail --silent --show-error https://retrofi.org/ -o /dev/null
