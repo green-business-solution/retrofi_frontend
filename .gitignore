@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+coverage/
+var/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.log
+
+.vite/
+.idea/
+.vscode/
+
+# Raw prompt/output work packets are archived in the private development S3 bucket.
+GPT Pro Work/
+
+# Generated test fixtures are archived in the private development S3 bucket.
+public/sample_matching_test_cases.json
+data/sample_user_profiles.json
+data/retrofi_patch_profiles*.json
+
+# Generated sibling dependency links
+/data
+/apps/api

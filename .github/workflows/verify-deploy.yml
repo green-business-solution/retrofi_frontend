@@ -1,0 +1,88 @@
+name: Verify and deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_data
+          path: retrofi_data
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_backend
+          path: retrofi_backend
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_frontend
+          path: retrofi_frontend
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install and link sibling repositories
+        run: |
+          npm ci --prefix retrofi_frontend
+          npm ci --prefix retrofi_backend
+          npm run setup --prefix retrofi_frontend
+          npm run setup --prefix retrofi_backend
+      - name: Verify retrofi_frontend
+        run: |
+          npm run typecheck --prefix retrofi_frontend
+          npm test --prefix retrofi_frontend
+          npm run build --prefix retrofi_frontend
+  deploy:
+    needs: checks
+    if: vars.RETROFI_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: retrofi-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_data
+          path: retrofi_data
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_backend
+          path: retrofi_backend
+      - uses: actions/checkout@v7
+        with:
+          repository: green-business-solution/retrofi_frontend
+          path: retrofi_frontend
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install and link sibling repositories
+        run: |
+          npm ci --prefix retrofi_frontend
+          npm ci --prefix retrofi_backend
+          npm run setup --prefix retrofi_frontend
+          npm run setup --prefix retrofi_backend
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::059310317821:role/gbs-github-actions-deploy
+          aws-region: us-east-1
+      - name: Deploy frontend
+        working-directory: retrofi_backend
+        env:
+          AWS_PROFILE: ''
+          AWS_DEPLOY_REGION: us-east-1
+          GBS_AWS_REGION: us-east-2
+        run: npm run deploy:production -- frontend
+      - name: Smoke check
+        run: |
+          curl --fail --silent --show-error https://retrofi.org/ -o /dev/null
+          curl --fail --silent --show-error https://retrofi.org/api/health | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{if(JSON.parse(s).ok!==true)process.exit(1)})'

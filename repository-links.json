@@ -1,0 +1,4 @@
+{
+  "data": "../retrofi_data/data",
+  "apps/api": "../retrofi_backend/apps/api"
+}
