@@ -10,6 +10,10 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    outputs:
+      data: ${{ steps.revisions.outputs.data }}
+      backend: ${{ steps.revisions.outputs.backend }}
+      frontend: ${{ steps.revisions.outputs.frontend }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,6 +37,12 @@ jobs:
           npm ci --prefix retrofi_backend
           npm run setup --prefix retrofi_frontend
           npm run setup --prefix retrofi_backend
+      - name: Record tested revisions
+        id: revisions
+        run: |
+          echo "data=$(git -C retrofi_data rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "backend=$(git -C retrofi_backend rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$(git -C retrofi_frontend rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Verify retrofi_frontend
         run: |
           npm run typecheck --prefix retrofi_frontend
@@ -53,15 +63,17 @@ jobs:
         with:
           repository: green-business-solution/retrofi_data
           path: retrofi_data
+          ref: ${{ needs.checks.outputs.data }}
       - uses: actions/checkout@v7
         with:
           repository: green-business-solution/retrofi_backend
           path: retrofi_backend
+          ref: ${{ needs.checks.outputs.backend }}
       - uses: actions/checkout@v7
         with:
           repository: green-business-solution/retrofi_frontend
           path: retrofi_frontend
-          ref: ${{ github.sha }}
+          ref: ${{ needs.checks.outputs.frontend }}
       - uses: actions/setup-node@v6
         with:
           node-version: 24
