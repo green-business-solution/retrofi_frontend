@@ -17,3 +17,5 @@ Run `npm run typecheck`, `npm test`, and `npm run build`. Start Vite with `npm r
 See [repository split](https://github.com/green-business-solution/retrofi_backend/blob/main/docs/repository-split.md) for ownership, deployment, history recovery, and removed features. Production remains https://retrofi.org.
 
 The Dashboard Performance Data admin tab has been removed. Its previous URL opens the main admin page.
+
+The Retrofits catalog tab has also been removed from admin navigation.

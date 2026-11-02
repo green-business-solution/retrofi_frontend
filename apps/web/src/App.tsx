@@ -913,45 +913,6 @@ type SampleMatchingTestCasesData = {
   testCases: SampleMatchingTestCase[];
 };
 
-type RetrofitIndexOpportunity = {
-  opportunityId: string;
-  opportunityName: string;
-  sourceName?: string | null;
-  sourceUrl?: string | null;
-  websiteUrl?: string | null;
-  applicationUrl?: string | null;
-  state?: string | null;
-  programType?: string | null;
-  administrator?: string | null;
-  confidence?: number;
-  matchBasis?: string;
-  matchedTerms?: string[];
-};
-
-type RetrofitIndexRow = {
-  retrofitTypeId: string;
-  displayName: string;
-  parentCategory: string;
-  isPhysicalRetrofit: boolean;
-  typicalComponents?: string[];
-  relatedSavingsModels?: string[];
-  typicalBillTypes?: string[];
-  opportunityCount: number;
-  opportunities: RetrofitIndexOpportunity[];
-};
-
-type RetrofitOpportunityIndexData = {
-  schemaVersion: string;
-  taxonomyVersion: string;
-  generatedAt: string;
-  matchingNow: string;
-  opportunityCount: number;
-  totalOpportunityRecordCount?: number;
-  archivedOpportunityCount?: number;
-  retrofitCount: number;
-  retrofits: RetrofitIndexRow[];
-};
-
 type AuthPayload = {
   dashboard: "client" | "admin";
   user: UserRecord;
@@ -14559,7 +14520,6 @@ function AdminClientPortalPreviewPage({
 }
 
 const ADMIN_OPPORTUNITIES_TAB = "Opportunities";
-const ADMIN_RETROFITS_TAB = "Retrofits";
 const ADMIN_TEST_CASES_TAB = "Test Cases";
 const ADMIN_USER_PREVIEW_TAB = "User Preview";
 const ADMIN_POST_FORM_PREVIEW_TAB = "Post Form Preview";
@@ -14572,7 +14532,6 @@ const ADMIN_HIDDEN_DATA_TABLE_NAMES = new Set([
   "gbs-users"
 ]);
 const ADMIN_TEST_CASES_DATA_PATH = "/sample_matching_test_cases.json";
-const ADMIN_RETROFIT_DATABASE_DATA_PATH = "/retrofit_opportunity_index.json";
 const SAMPLE_MATCH_STATUS_ORDER = [
   "eligible",
   "ineligible"
@@ -14588,7 +14547,6 @@ const billFieldDictionaryById = new Map(billFieldDictionaryEntries.map((field) =
 
 function adminSectionKey(tab: string) {
   if (tab === ADMIN_OPPORTUNITIES_TAB) return "database:opportunities";
-  if (tab === ADMIN_RETROFITS_TAB) return "database:retrofits";
   if (tab === ADMIN_TEST_CASES_TAB) return "test-cases";
   return tab === "Users" ? "users" : `table:${tab}`;
 }
@@ -15018,12 +14976,10 @@ function AdminDashboard({
     ...dataTables
       .filter((table) => table.name !== OPPORTUNITIES_TABLE_NAME && !ADMIN_HIDDEN_DATA_TABLE_NAMES.has(table.name))
       .map((table) => table.name),
-    ADMIN_OPPORTUNITIES_TAB,
-    ADMIN_RETROFITS_TAB
+    ADMIN_OPPORTUNITIES_TAB
   ];
   const selectedDataTable =
     activeTab === ADMIN_OPPORTUNITIES_TAB ||
-    activeTab === ADMIN_RETROFITS_TAB ||
     activeTab === ADMIN_TEST_CASES_TAB
       ? null
       : dataTables.find((table) => table.name === activeTab) || null;
@@ -15068,8 +15024,7 @@ function AdminDashboard({
 
     if (
       tab === ADMIN_TEST_CASES_TAB ||
-      tab === ADMIN_OPPORTUNITIES_TAB ||
-      tab === ADMIN_RETROFITS_TAB
+      tab === ADMIN_OPPORTUNITIES_TAB
     ) {
       markSectionLoaded(sectionKey);
       return;
@@ -15134,7 +15089,6 @@ function AdminDashboard({
       activeTab !== ADMIN_POST_FORM_PREVIEW_TAB &&
       activeTab !== ADMIN_TEST_CASES_TAB &&
       activeTab !== ADMIN_OPPORTUNITIES_TAB &&
-      activeTab !== ADMIN_RETROFITS_TAB &&
       !isVisibleDataTable
     ) {
       setActiveTab("Users");
@@ -15182,8 +15136,6 @@ function AdminDashboard({
         <AdminTestCasesPanel />
       ) : activeTab === ADMIN_OPPORTUNITIES_TAB ? (
         <AdminDatabasePanel credential={credential} />
-      ) : activeTab === ADMIN_RETROFITS_TAB ? (
-        <AdminRetrofitDatabasePanel />
       ) : (
         <AdminDataPanel
           credential={credential}
@@ -16802,218 +16754,6 @@ function AdminDatabasePanel({ credential }: { credential: AuthCredential | null 
   }
 
   return <DatabaseBrowser credential={credential} embedded />;
-}
-
-function AdminRetrofitDatabasePanel() {
-  const [dataset, setDataset] = useState<RetrofitOpportunityIndexData | null>(null);
-  const [selectedRetrofitId, setSelectedRetrofitId] = useState("");
-  const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    setIsLoading(true);
-    setError(null);
-    apiGet<RetrofitOpportunityIndexData>(ADMIN_RETROFIT_DATABASE_DATA_PATH)
-      .then((payload) => {
-        if (!isMounted) return;
-        setDataset(payload);
-        setSelectedRetrofitId(payload.retrofits[0]?.retrofitTypeId || "");
-      })
-      .catch((requestError) => {
-        if (!isMounted) return;
-        setError(requestError instanceof Error ? requestError.message : "Could not load retrofit database.");
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const filteredRetrofits = useMemo(() => {
-    const retrofits = dataset?.retrofits || [];
-    const normalizedQuery = normalizeDatabaseFilterValue(query);
-    if (!normalizedQuery) return retrofits;
-    return retrofits.filter((retrofit) => {
-      const haystack = normalizeDatabaseFilterValue(
-        [
-          retrofit.displayName,
-          retrofit.retrofitTypeId,
-          retrofit.parentCategory,
-          ...(retrofit.typicalComponents || []),
-          ...(retrofit.relatedSavingsModels || []),
-          ...(retrofit.typicalBillTypes || []),
-          ...retrofit.opportunities.flatMap((opportunity) => [
-            opportunity.opportunityName,
-            opportunity.opportunityId,
-            opportunity.sourceName,
-            opportunity.state,
-            opportunity.programType,
-            opportunity.administrator
-          ])
-        ].filter(Boolean).join(" ")
-      );
-      return haystack.includes(normalizedQuery);
-    });
-  }, [dataset, query]);
-
-  const selectedRetrofit =
-    filteredRetrofits.find((retrofit) => retrofit.retrofitTypeId === selectedRetrofitId) ||
-    filteredRetrofits[0] ||
-    null;
-
-  useEffect(() => {
-    if (filteredRetrofits.length === 0) {
-      if (selectedRetrofitId) setSelectedRetrofitId("");
-      return;
-    }
-    if (!filteredRetrofits.some((retrofit) => retrofit.retrofitTypeId === selectedRetrofitId)) {
-      setSelectedRetrofitId(filteredRetrofits[0].retrofitTypeId);
-    }
-  }, [filteredRetrofits, selectedRetrofitId]);
-
-  return (
-    <section className="database-shell admin-database-shell">
-      <div className="database-toolbar">
-        <div>
-          <p className="eyebrow">Retrofit database</p>
-          <h1>Retrofit opportunity index</h1>
-          <p>Browse each retrofit type and the opportunities currently connected to it.</p>
-        </div>
-        <div className="database-stats">
-          <strong>{(dataset?.retrofitCount || filteredRetrofits.length).toLocaleString()}</strong>
-          <span>{isLoading ? "loading retrofit types" : "retrofit types"}</span>
-        </div>
-      </div>
-
-      <div className="database-filters">
-        <label className="field database-search">
-          <span>Search</span>
-          <input
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search retrofit, category, or opportunity"
-            type="search"
-            value={query}
-          />
-        </label>
-      </div>
-
-      {dataset ? (
-        <p className="muted-message">
-          Generated {formatDate(dataset.generatedAt)} from {dataset.opportunityCount.toLocaleString()} visible opportunities.
-        </p>
-      ) : null}
-      {error ? <p className="error-message">{error}</p> : null}
-
-      <div className="database-layout">
-        <section className="database-list-panel" aria-label="Retrofit types">
-          <div className="database-list-header">
-            <span>{isLoading ? "Loading" : `${filteredRetrofits.length} shown`}</span>
-            <span>{dataset?.taxonomyVersion || "Taxonomy"}</span>
-          </div>
-          <div className="database-list">
-            {isLoading && filteredRetrofits.length === 0 ? (
-              <RetroFiSkeleton variant="list" rows={5} label="Loading retrofit types" />
-            ) : filteredRetrofits.length === 0 ? (
-              <p className="empty-state">No retrofit types match the current search.</p>
-            ) : null}
-            {filteredRetrofits.map((retrofit) => (
-              <button
-                aria-current={retrofit.retrofitTypeId === selectedRetrofit?.retrofitTypeId ? "true" : undefined}
-                className="database-list-item"
-                key={retrofit.retrofitTypeId}
-                onClick={() => setSelectedRetrofitId(retrofit.retrofitTypeId)}
-                type="button"
-              >
-                <span>
-                  <strong>{retrofit.displayName}</strong>
-                  <small>{retrofit.parentCategory.replaceAll("_", " ")}</small>
-                </span>
-                <mark>{retrofit.opportunityCount.toLocaleString()}</mark>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {isLoading && !selectedRetrofit ? (
-          <section className="database-detail-panel">
-            <RetroFiSkeleton variant="card" label="Loading retrofit database details" />
-          </section>
-        ) : (
-          <RetrofitDatabaseDetail retrofit={selectedRetrofit} />
-        )}
-      </div>
-    </section>
-  );
-}
-
-function RetrofitDatabaseDetail({ retrofit }: { retrofit: RetrofitIndexRow | null }) {
-  if (!retrofit) {
-    return (
-      <section className="database-detail-panel">
-        <p className="empty-state">Select a retrofit type to inspect related opportunities.</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="database-detail-panel">
-      <div className="database-detail-header">
-        <p className="eyebrow">{retrofit.retrofitTypeId}</p>
-        <h2>{retrofit.displayName}</h2>
-        <div className="database-chip-row">
-          <span>{retrofit.parentCategory.replaceAll("_", " ")}</span>
-          <span>{retrofit.isPhysicalRetrofit ? "Physical retrofit" : "Service or product"}</span>
-          <span>{retrofit.opportunityCount.toLocaleString()} opportunities</span>
-        </div>
-      </div>
-
-      <div className="database-summary-grid">
-        <DetailItem label="Typical bill types" value={(retrofit.typicalBillTypes || []).join(", ") || "Not listed"} />
-        <DetailItem label="Savings models" value={(retrofit.relatedSavingsModels || []).join(", ") || "Not listed"} />
-        <DetailItem label="Components" value={String((retrofit.typicalComponents || []).length)} />
-      </div>
-
-      <section className="database-detail-section">
-        <h3>Typical Components</h3>
-        <div className="database-chip-row">
-          {(retrofit.typicalComponents?.length ? retrofit.typicalComponents : ["No typical components listed"]).map((component) => (
-            <span key={component}>{component}</span>
-          ))}
-        </div>
-      </section>
-
-      <section className="database-detail-section">
-        <h3>Connected Opportunities</h3>
-        {retrofit.opportunities.length === 0 ? (
-          <p>No opportunities are currently connected to this retrofit type.</p>
-        ) : (
-          <div className="parameter-set-list">
-            {retrofit.opportunities.map((opportunity) => (
-              <article className="parameter-set" key={opportunity.opportunityId}>
-                <h4>{opportunity.opportunityName}</h4>
-                <p>{[opportunity.sourceName, opportunity.state, opportunity.programType].filter(Boolean).join(" / ") || "No source summary"}</p>
-                <small>
-                  Confidence {Math.round((opportunity.confidence || 0) * 100)}%
-                  {opportunity.matchedTerms?.length ? ` via ${opportunity.matchedTerms.slice(0, 3).join(", ")}` : ""}
-                </small>
-                <div className="link-list">
-                  {opportunity.sourceUrl ? <a href={opportunity.sourceUrl} rel="noreferrer" target="_blank">Source</a> : null}
-                  {opportunity.websiteUrl ? <a href={opportunity.websiteUrl} rel="noreferrer" target="_blank">Program website</a> : null}
-                  {opportunity.applicationUrl ? <a href={opportunity.applicationUrl} rel="noreferrer" target="_blank">Application</a> : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </section>
-  );
 }
 
 function AdminDataPanel({
