@@ -15,7 +15,6 @@ export type Route =
   | "user-preview"
   | "chats"
   | "admin"
-  | "admin-dashboard-performance-data"
   | "testcases";
 
 export const aboutLinks: Array<{ label: string; route: Route }> = [
@@ -61,7 +60,7 @@ export function routePathMatchFromPath(
     return { isKnownPath: true, route: "user-preview" };
   if (pathname === "/chats") return { isKnownPath: true, route: "chats" };
   if (pathname === "/admin/dashboard-performance-data") {
-    return { isKnownPath: true, route: "admin-dashboard-performance-data" };
+    return { isKnownPath: true, route: "admin" };
   }
   if (pathname === "/admin") return { isKnownPath: true, route: "admin" };
   if (pathname === "/testcases")
@@ -96,8 +95,6 @@ export function pathForRoute(route: Route) {
   if (route === "about-team") return "/about/team";
   if (route === "about-trust") return "/about/trust";
   if (route === "about-contact") return "/about/contact";
-  if (route === "admin-dashboard-performance-data")
-    return "/admin/dashboard-performance-data";
   if (route === "scan-results") return "/scan/results";
   if (route === "scan-energy-data") return "/scan/energy-data";
   return `/${route}`;

@@ -15,3 +15,5 @@ Use Node 24. Run `npm ci` in frontend and backend, then `npm run setup` in each 
 Run `npm run typecheck`, `npm test`, and `npm run build`. Start Vite with `npm run dev`; it proxies /api to localhost:8787.
 
 See [repository split](https://github.com/green-business-solution/retrofi_backend/blob/main/docs/repository-split.md) for ownership, deployment, history recovery, and removed features. Production remains https://retrofi.org.
+
+The Dashboard Performance Data admin tab has been removed. Its previous URL opens the main admin page.

@@ -1,5 +1,5 @@
 import { ChangeEvent, CSSProperties, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiDelete, apiGet, apiPost, apiPut } from "./api";
+import { apiGet, apiPost, apiPut } from "./api";
 import type { AuthCredential } from "./authTypes";
 import {
   AUTH_CREDENTIAL_STORAGE_KEY,
@@ -5058,7 +5058,6 @@ function isAppChromeRoute(route: Route) {
     route === "user-preview" ||
     route === "chats" ||
     route === "admin" ||
-    route === "admin-dashboard-performance-data" ||
     route === "testcases"
   );
 }
@@ -14564,7 +14563,6 @@ const ADMIN_RETROFITS_TAB = "Retrofits";
 const ADMIN_TEST_CASES_TAB = "Test Cases";
 const ADMIN_USER_PREVIEW_TAB = "User Preview";
 const ADMIN_POST_FORM_PREVIEW_TAB = "Post Form Preview";
-const ADMIN_DASHBOARD_PERFORMANCE_TAB = "Dashboard Performance Data";
 const ADMIN_HIDDEN_DATA_TABLE_NAMES = new Set([
   "gbs-application-profiles",
   "gbs-api-runtime-state",
@@ -14592,7 +14590,6 @@ function adminSectionKey(tab: string) {
   if (tab === ADMIN_OPPORTUNITIES_TAB) return "database:opportunities";
   if (tab === ADMIN_RETROFITS_TAB) return "database:retrofits";
   if (tab === ADMIN_TEST_CASES_TAB) return "test-cases";
-  if (tab === ADMIN_DASHBOARD_PERFORMANCE_TAB) return "dashboard-performance-data";
   return tab === "Users" ? "users" : `table:${tab}`;
 }
 
@@ -15017,7 +15014,6 @@ function AdminDashboard({
     "Users",
     ADMIN_USER_PREVIEW_TAB,
     ADMIN_POST_FORM_PREVIEW_TAB,
-    ADMIN_DASHBOARD_PERFORMANCE_TAB,
     ADMIN_TEST_CASES_TAB,
     ...dataTables
       .filter((table) => table.name !== OPPORTUNITIES_TABLE_NAME && !ADMIN_HIDDEN_DATA_TABLE_NAMES.has(table.name))
@@ -15072,7 +15068,6 @@ function AdminDashboard({
 
     if (
       tab === ADMIN_TEST_CASES_TAB ||
-      tab === ADMIN_DASHBOARD_PERFORMANCE_TAB ||
       tab === ADMIN_OPPORTUNITIES_TAB ||
       tab === ADMIN_RETROFITS_TAB
     ) {
@@ -15137,7 +15132,6 @@ function AdminDashboard({
     if (
       activeTab !== "Users" &&
       activeTab !== ADMIN_POST_FORM_PREVIEW_TAB &&
-      activeTab !== ADMIN_DASHBOARD_PERFORMANCE_TAB &&
       activeTab !== ADMIN_TEST_CASES_TAB &&
       activeTab !== ADMIN_OPPORTUNITIES_TAB &&
       activeTab !== ADMIN_RETROFITS_TAB &&
@@ -15165,7 +15159,7 @@ function AdminDashboard({
       window.open(pathForRoute("testcases"), "_blank", "noopener,noreferrer");
       return;
     }
-    const nextPath = item === ADMIN_DASHBOARD_PERFORMANCE_TAB ? pathForRoute("admin-dashboard-performance-data") : pathForRoute("admin");
+    const nextPath = pathForRoute("admin");
     if (window.location.pathname !== nextPath) {
       window.history.pushState({}, "", nextPath);
     }
@@ -15184,8 +15178,6 @@ function AdminDashboard({
       {error ? <p className="error-message">{error}</p> : null}
       {activeTab === "Users" ? (
         <AdminUsersPanel isLoading={isCurrentSectionLoading} onRefresh={() => void refreshDashboard()} rows={rows} />
-      ) : activeTab === ADMIN_DASHBOARD_PERFORMANCE_TAB ? (
-        <AdminDashboardPerformanceDataPanel credential={credential} />
       ) : activeTab === ADMIN_TEST_CASES_TAB ? (
         <AdminTestCasesPanel />
       ) : activeTab === ADMIN_OPPORTUNITIES_TAB ? (
@@ -15210,423 +15202,6 @@ function AdminTestCasesStandalonePage() {
     <main className="testcases-standalone-page">
       <AdminTestCasesPanel />
     </main>
-  );
-}
-
-type DashboardPerformanceSummary = {
-  testCaseId: string;
-  businessName?: string;
-  businessType?: string;
-  archetype?: string;
-  location?: string;
-  reportingPeriod?: { label?: string };
-  implementedRetrofitCount: number;
-  monthlyRecordCount: number;
-  incentiveRecordCount: number;
-  documentRecordCount: number;
-  certificationRecordCount: number;
-  certificationRequirementCount: number;
-  nextBestActionCount: number;
-  dataQuality?: { status?: string; notes?: string[]; warnings?: string[] };
-  storageStatus?: string;
-  updatedAt?: string | null;
-};
-
-type DashboardPerformanceListResponse = {
-  summaries: DashboardPerformanceSummary[];
-  totals: {
-    testCases: number;
-    withPostInstallData: number;
-    emptyCases: number;
-    implementedRetrofits: number;
-    monthlyRecords: number;
-    incentives: number;
-    documents: number;
-    certifications: number;
-    nextBestActions: number;
-  };
-  storageStatus?: string;
-  warnings?: string[];
-};
-
-type DashboardPerformanceDetailResponse = {
-  dataset: DashboardPostImplementationDataset;
-  summary: DashboardPerformanceSummary;
-  storageStatus?: string;
-  validation?: { valid?: boolean; errors?: string[]; warnings?: string[] };
-};
-
-function AdminDashboardPerformanceDataPanel({ credential }: { credential: AuthCredential | null }) {
-  const [response, setResponse] = useState<DashboardPerformanceListResponse | null>(null);
-  const [selectedDetail, setSelectedDetail] = useState<DashboardPerformanceDetailResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isMutating, setIsMutating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const summaries = response?.summaries || [];
-  const totals =
-    response?.totals || {
-      testCases: 0,
-      withPostInstallData: 0,
-      emptyCases: 0,
-      implementedRetrofits: 0,
-      monthlyRecords: 0,
-      incentives: 0,
-      documents: 0,
-      certifications: 0,
-      nextBestActions: 0
-    };
-
-  const loadSummaries = useCallback(async () => {
-    if (!credential) {
-      setError("Sign in again to manage dashboard performance data.");
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const nextResponse = await apiGet<DashboardPerformanceListResponse>("/api/admin/dashboard-performance/test-cases", {
-        headers: adminAuthHeaders(credential)
-      });
-      setResponse(nextResponse);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not load dashboard performance data.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [credential]);
-
-  useEffect(() => {
-    void loadSummaries();
-  }, [loadSummaries]);
-
-  async function viewDataset(testCaseId: string) {
-    if (!credential) {
-      setError("Sign in again to inspect dashboard performance data.");
-      return;
-    }
-
-    setError(null);
-    setMessage(null);
-    try {
-      const detail = await apiGet<DashboardPerformanceDetailResponse>(
-        `/api/admin/dashboard-performance/test-cases/${encodeURIComponent(testCaseId)}`,
-        { headers: adminAuthHeaders(credential) }
-      );
-      setSelectedDetail(detail);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not load the selected dataset.");
-    }
-  }
-
-  async function seedOne(testCaseId: string) {
-    if (!credential) {
-      setError("Sign in again to seed dashboard performance data.");
-      return;
-    }
-
-    setIsMutating(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const detail = await apiPost<DashboardPerformanceDetailResponse>(
-        `/api/admin/dashboard-performance/test-cases/${encodeURIComponent(testCaseId)}/seed`,
-        adminAuthBody(credential)
-      );
-      setSelectedDetail(detail);
-      setMessage(`Seeded dashboard performance data for ${testCaseId}.`);
-      await loadSummaries();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not seed dashboard performance data.");
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function seedAll() {
-    if (!credential) {
-      setError("Sign in again to seed dashboard performance data.");
-      return;
-    }
-
-    setIsMutating(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const nextResponse = await apiPost<DashboardPerformanceListResponse>(
-        "/api/admin/dashboard-performance/seed-all",
-        adminAuthBody(credential)
-      );
-      setResponse(nextResponse);
-      setMessage(`Seeded ${nextResponse.totals.withPostInstallData} populated dashboard performance datasets.`);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not seed dashboard performance data.");
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function deleteOne(testCaseId: string) {
-    if (!credential) {
-      setError("Sign in again to delete dashboard performance data.");
-      return;
-    }
-    if (!window.confirm(`Delete synthetic dashboard performance data for ${testCaseId}?`)) return;
-
-    setIsMutating(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await apiDelete(`/api/admin/dashboard-performance/test-cases/${encodeURIComponent(testCaseId)}`, {
-        headers: adminAuthHeaders(credential)
-      });
-      if (selectedDetail?.summary.testCaseId === testCaseId) {
-        setSelectedDetail(null);
-      }
-      setMessage(`Deleted synthetic dashboard performance data for ${testCaseId}.`);
-      await loadSummaries();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not delete dashboard performance data.");
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  async function deleteAll() {
-    if (!credential) {
-      setError("Sign in again to delete dashboard performance data.");
-      return;
-    }
-    if (!window.confirm("Delete all synthetic dashboard performance datasets?")) return;
-
-    setIsMutating(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await apiDelete("/api/admin/dashboard-performance", {
-        headers: adminAuthHeaders(credential)
-      });
-      setSelectedDetail(null);
-      setMessage("Deleted all synthetic dashboard performance data.");
-      await loadSummaries();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not delete dashboard performance data.");
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
-  function openDashboardPreview(testCaseId: string) {
-    const params = new URLSearchParams({ sampleUserId: testCaseId });
-    window.open(`${pathForRoute("user-preview")}?${params.toString()}`, "_blank", "noopener,noreferrer");
-  }
-
-  async function validateAllGeneratedData() {
-    await loadSummaries();
-    setMessage("Validated generated dashboard performance dataset summaries.");
-  }
-
-  async function copySelectedDatasetJson() {
-    if (!selectedDetail?.dataset || !navigator?.clipboard) return;
-    await navigator.clipboard.writeText(JSON.stringify(selectedDetail.dataset, null, 2));
-    setMessage("Copied selected dataset JSON.");
-  }
-
-  const selectedDataset = selectedDetail?.dataset || null;
-  const selectedValidationErrors = selectedDetail?.validation?.errors || [];
-  const selectedValidationWarnings = selectedDetail?.validation?.warnings || selectedDataset?.dataQuality?.warnings || [];
-  const monthlyCoverage = selectedDataset?.monthlyPerformanceRecords?.length
-    ? new Set(
-        selectedDataset.monthlyPerformanceRecords
-          .map((record) => (isPlainRecord(record) ? String(record.month || "") : ""))
-          .filter(Boolean)
-      ).size
-    : 0;
-
-  return (
-    <section className="admin-dashboard-performance">
-      <div className="admin-dashboard-performance-header">
-        <div>
-          <p className="eyebrow">Admin test data</p>
-          <h2>Dashboard Performance Test Data</h2>
-          <p>Seed and inspect post-implementation performance records used by admin preview dashboards.</p>
-        </div>
-        <span className="soft-badge">Storage: {response?.storageStatus || "checking"}</span>
-      </div>
-
-      {error ? <p className="error-message">{error}</p> : null}
-      {message ? <p className="success-message">{message}</p> : null}
-      {response?.warnings?.length ? (
-        <div className="admin-dashboard-performance-warning">
-          {response.warnings.map((warning) => (
-            <p key={warning}>{warning}</p>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="admin-dashboard-performance-stats">
-        <article><span>Total test cases</span><strong>{totals.testCases}</strong></article>
-        <article><span>With post-install data</span><strong>{totals.withPostInstallData}</strong></article>
-        <article><span>Empty/new-user cases</span><strong>{totals.emptyCases}</strong></article>
-        <article><span>Implemented retrofits</span><strong>{totals.implementedRetrofits}</strong></article>
-        <article><span>Monthly records</span><strong>{totals.monthlyRecords}</strong></article>
-        <article><span>Incentives</span><strong>{totals.incentives}</strong></article>
-        <article><span>Documents</span><strong>{totals.documents}</strong></article>
-        <article><span>Certifications</span><strong>{totals.certifications}</strong></article>
-        <article><span>Next actions</span><strong>{totals.nextBestActions}</strong></article>
-      </div>
-
-      <div className="admin-dashboard-performance-actions">
-        <button className="secondary-button" disabled={isLoading || isMutating} onClick={() => void validateAllGeneratedData()} type="button">
-          Validate all generated data
-        </button>
-        <button className="secondary-button" disabled={isLoading || isMutating} onClick={() => void loadSummaries()} type="button">
-          Refresh from backend
-        </button>
-        <button disabled={isLoading || isMutating} onClick={() => void seedAll()} type="button">
-          {isMutating ? "Working..." : "Seed all test cases"}
-        </button>
-        <button className="secondary-button" disabled={isLoading || isMutating} onClick={() => void seedAll()} type="button">
-          Reseed all synthetic data
-        </button>
-        <button className="danger-button" disabled={isLoading || isMutating} onClick={() => void deleteAll()} type="button">
-          Delete all synthetic dashboard data
-        </button>
-      </div>
-
-      <div className="admin-dashboard-performance-table-wrap">
-        <table className="admin-dashboard-performance-table">
-          <thead>
-            <tr>
-              <th>Test case</th>
-              <th>Business type / archetype</th>
-              <th>Location</th>
-              <th>Retrofits</th>
-              <th>Monthly</th>
-              <th>Incentives</th>
-              <th>Documents</th>
-              <th>Certifications</th>
-              <th>Actions</th>
-              <th>Quality</th>
-              <th>Updated</th>
-              <th>Manage</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr><td colSpan={12}>Loading dashboard performance data...</td></tr>
-            ) : summaries.length ? (
-              summaries.map((summary) => (
-                <tr key={summary.testCaseId}>
-                  <td>
-                    <strong>{summary.businessName || summary.testCaseId}</strong>
-                    <span>{summary.testCaseId}</span>
-                  </td>
-                  <td>{[summary.businessType, summary.archetype].filter(Boolean).join(" / ") || "Unknown"}</td>
-                  <td>{summary.location || "Not provided"}</td>
-                  <td>{summary.implementedRetrofitCount}</td>
-                  <td>{summary.monthlyRecordCount}</td>
-                  <td>{summary.incentiveRecordCount}</td>
-                  <td>{summary.documentRecordCount}</td>
-                  <td>{summary.certificationRecordCount}</td>
-                  <td>{summary.nextBestActionCount}</td>
-                  <td><span className={`soft-badge quality-${summary.dataQuality?.status || "empty"}`}>{summary.dataQuality?.status || "empty"}</span></td>
-                  <td>{summary.updatedAt ? new Date(summary.updatedAt).toLocaleDateString() : "Not seeded"}</td>
-                  <td>
-                    <div className="admin-dashboard-performance-row-actions">
-                      <button className="secondary-button" onClick={() => void viewDataset(summary.testCaseId)} type="button">View</button>
-                      <button className="secondary-button" disabled={isMutating} onClick={() => void seedOne(summary.testCaseId)} type="button">Seed</button>
-                      <button className="secondary-button" onClick={() => openDashboardPreview(summary.testCaseId)} type="button">Open dashboard preview</button>
-                      <button className="danger-button" disabled={isMutating || summary.implementedRetrofitCount === 0} onClick={() => void deleteOne(summary.testCaseId)} type="button">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr><td colSpan={12}>No sample test cases were found.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {selectedDetail && selectedDataset ? (
-        <aside className="admin-dashboard-performance-detail">
-          <div className="admin-dashboard-performance-detail-header">
-            <div>
-              <p className="eyebrow">Dataset detail</p>
-              <h3>{selectedDetail.summary.businessName || selectedDetail.summary.testCaseId}</h3>
-              <p>{selectedDataset.reportingPeriod?.label || "Reporting period unavailable"}</p>
-            </div>
-            <button className="secondary-button" onClick={() => setSelectedDetail(null)} type="button">Close</button>
-          </div>
-
-          <div className="admin-dashboard-performance-detail-grid">
-            <article>
-              <span>Implemented retrofits</span>
-              <strong>{selectedDataset.implementedRetrofits?.length || 0}</strong>
-            </article>
-            <article>
-              <span>Monthly coverage</span>
-              <strong>{monthlyCoverage} months</strong>
-            </article>
-            <article>
-              <span>Documents</span>
-              <strong>{selectedDataset.documentRecords?.length || 0}</strong>
-            </article>
-            <article>
-              <span>Next actions</span>
-              <strong>{selectedDataset.nextBestActions?.length || 0}</strong>
-            </article>
-          </div>
-
-          <div className="admin-dashboard-performance-detail-section">
-            <h4>Implemented retrofits</h4>
-            <div className="admin-dashboard-performance-mini-table-wrap">
-              <table className="admin-dashboard-performance-mini-table">
-                <thead><tr><th>Name</th><th>Status</th><th>Actual cost</th><th>Annual savings</th><th>Payback</th></tr></thead>
-                <tbody>
-                  {(selectedDataset.implementedRetrofits || []).slice(0, 8).map((record) => {
-                    const retrofit = isPlainRecord(record) ? record : {};
-                    return (
-                      <tr key={String(retrofit.id || retrofit.retrofitId)}>
-                        <td>{String(retrofit.name || retrofit.retrofitId || "Retrofit")}</td>
-                        <td>{String(retrofit.status || "unknown")}</td>
-                        <td>{formatDashboardCurrencyCents(Number(retrofit.actualProjectCostCents) || null)}</td>
-                        <td>{formatDashboardCurrencyCents(Number(retrofit.actualAnnualSavingsCents) || null)}</td>
-                        <td>{typeof retrofit.actualPaybackYears === "number" ? `${retrofit.actualPaybackYears.toFixed(1)} yrs` : "Unavailable"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="admin-dashboard-performance-detail-section">
-            <h4>Validation</h4>
-            {selectedValidationErrors.length || selectedValidationWarnings.length ? (
-              <ul>
-                {selectedValidationErrors.map((validationError) => <li key={validationError}>{validationError}</li>)}
-                {selectedValidationWarnings.map((warning) => <li key={warning}>{warning}</li>)}
-              </ul>
-            ) : (
-              <p>No validation warnings for this dataset.</p>
-            )}
-          </div>
-
-          <div className="admin-dashboard-performance-detail-section">
-            <div className="admin-dashboard-performance-section-heading">
-              <h4>Raw JSON preview</h4>
-              <button className="secondary-button" onClick={() => void copySelectedDatasetJson()} type="button">Copy JSON</button>
-            </div>
-            <pre className="admin-dashboard-performance-json">{JSON.stringify(selectedDataset, null, 2)}</pre>
-          </div>
-        </aside>
-      ) : null}
-    </section>
   );
 }
 
@@ -18417,8 +17992,7 @@ export function App() {
       payload.dashboard === "admin"
         ? route === "testcases" ||
           route === "user-preview" ||
-          route === "chats" ||
-          route === "admin-dashboard-performance-data"
+          route === "chats"
           ? route
           : "admin"
         : "portal"
@@ -18588,8 +18162,7 @@ export function App() {
 
   if (
     effectiveRoute === "portal" ||
-    effectiveRoute === "admin" ||
-    effectiveRoute === "admin-dashboard-performance-data"
+    effectiveRoute === "admin"
   ) {
     if (!authPayload) {
       return (
@@ -18606,7 +18179,7 @@ export function App() {
       return (
         <AdminDashboard
           credential={authCredential}
-          initialTab={effectiveRoute === "admin-dashboard-performance-data" ? ADMIN_DASHBOARD_PERFORMANCE_TAB : "Users"}
+          initialTab="Users"
           onSignOut={signOut}
           payload={authPayload.adminDashboard}
         />

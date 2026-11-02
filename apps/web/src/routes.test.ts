@@ -11,6 +11,7 @@ describe("routes", () => {
     expect(shouldCanonicalizeUnknownHomeFallback("/")).toBe(false);
     expect(shouldCanonicalizeUnknownHomeFallback("/pricing")).toBe(false);
     expect(shouldCanonicalizeUnknownHomeFallback("/admin")).toBe(false);
+    expect(routeFromPath("/admin/dashboard-performance-data")).toBe("admin");
     expect(shouldCanonicalizeUnknownHomeFallback("/for-businesses")).toBe(false);
     expect(shouldCanonicalizeUnknownHomeFallback("/get-started")).toBe(false);
   });

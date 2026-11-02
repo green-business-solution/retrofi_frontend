@@ -748,12 +748,6 @@ describe("retrofit recommendations preview", () => {
     expect(mainPagesSource).not.toContain("Savings by Retrofit");
     expect(mainPagesSource).not.toContain("Gaps & Readiness");
     expect(source).toContain("Cash Flow & Incentives");
-    expect(source).toContain("AdminDashboardPerformanceDataPanel");
-    expect(source).toContain("Dashboard Performance Test Data");
-    expect(source).toContain("/api/admin/dashboard-performance/test-cases");
-    expect(source).toContain("/api/admin/dashboard-performance/seed-all");
-    expect(source).toContain("Validate all generated data");
-    expect(source).toContain("Open dashboard preview");
     expect(source).toContain("Savings by Retrofit");
     expect(source).toContain("Outlook & Equivalencies");
     expect(source).toContain("Gaps & Readiness");
